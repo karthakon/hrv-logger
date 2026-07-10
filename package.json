@@ -1,0 +1,29 @@
+{
+  "name": "hrv-logger",
+  "author": "MakeAwesomeHappen",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "hrv-logger",
+    "uuid": "d6d0380c-9481-4487-9bbb-4088b204bc86",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [],
+    "resources": {
+      "media": []
+    },
+    "capabilities": [
+      "health"
+    ]
+  }
+}
