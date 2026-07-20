@@ -18,6 +18,57 @@ static uint32_t s_hrv_events = 0;
 static uint32_t s_hr_events = 0;
 static time_t s_start = 0;
 
+// Mirror of hrv-monitor's gate (hrv_math.c) for comparable live stats.
+#define LG_BUF_MAX 400
+#define LG_STALE_SEC 10
+static uint16_t s_ppi_buf[LG_BUF_MAX];
+static uint16_t s_beats = 0;
+static uint32_t s_rej = 0, s_rej_range = 0, s_rej_jump = 0;
+static uint16_t s_gate_last = 0;
+static uint32_t s_gate_last_time = 0;
+
+static void prv_gate_reset(void) {
+  s_beats = 0;
+  s_rej = s_rej_range = s_rej_jump = 0;
+  s_gate_last = 0;
+  s_gate_last_time = 0;
+}
+
+static void prv_gate_add(uint16_t ppi_ms, uint32_t now) {
+  if (ppi_ms < 300 || ppi_ms > 2000) { s_rej++; s_rej_range++; return; }
+  bool fresh = (s_gate_last_time > 0) && ((now - s_gate_last_time) <= LG_STALE_SEC);
+  if (s_gate_last > 0 && fresh) {
+    uint32_t diff = (ppi_ms > s_gate_last) ? (ppi_ms - s_gate_last)
+                                           : (s_gate_last - ppi_ms);
+    if (diff * 5 > s_gate_last) { s_rej++; s_rej_jump++; return; }
+  }
+  if (s_beats < LG_BUF_MAX) {
+    s_ppi_buf[s_beats++] = ppi_ms;
+  } else {
+    memmove(s_ppi_buf, s_ppi_buf + 1, (LG_BUF_MAX - 1) * sizeof(uint16_t));
+    s_ppi_buf[LG_BUF_MAX - 1] = ppi_ms;
+  }
+  s_gate_last = ppi_ms;
+  s_gate_last_time = now;
+}
+
+static uint32_t prv_isqrt(uint32_t n) {
+  uint32_t x = n, y = (x + 1) / 2;
+  if (n < 2) return n;
+  while (y < x) { x = y; y = (x + n / x) / 2; }
+  return x;
+}
+
+static uint16_t prv_rmssd(void) {
+  if (s_beats < 2) return 0;
+  uint64_t sumsq = 0;
+  for (uint16_t i = 1; i < s_beats; i++) {
+    int32_t d = (int32_t)s_ppi_buf[i] - (int32_t)s_ppi_buf[i - 1];
+    sumsq += (uint64_t)(d * d);
+  }
+  return (uint16_t)prv_isqrt((uint32_t)(sumsq / (s_beats - 1)));
+}
+
 static void prv_health_handler(HealthEventType event, void *context) {
   if (event == HealthEventHeartRateUpdate) {
     s_hr_events++;
@@ -30,6 +81,7 @@ static void prv_health_handler(HealthEventType event, void *context) {
       s_last_ppi = ppi;
       if (s_min_ppi == 0 || ppi < s_min_ppi) s_min_ppi = ppi;
       if (ppi > s_max_ppi) s_max_ppi = ppi;
+      if (s_sampling) prv_gate_add(ppi, (uint32_t)time(NULL));
       APP_LOG(APP_LOG_LEVEL_INFO, "HRV %lu ppi=%u ms",
               (unsigned long)s_hrv_events, ppi);
     }
@@ -45,12 +97,16 @@ static void prv_set_sampling(bool on) {
 static void prv_tick(struct tm *tick_time, TimeUnits units) {
   uint32_t dur = s_start ? (uint32_t)(time(NULL) - s_start) : 0;
   snprintf(s_buf, sizeof(s_buf),
-    "HRV LOGGER\n\nSampling: %s\nElapsed: %lum\n\n"
-    "PPI: %u ms\nRange: %u-%u\nHRV ev: %lu\n\nHR: %u bpm\nHR ev: %lu",
+    "HRV LOGGER %s\nDur %lu:%02lu\n"
+    "Beats %u  Rej %lu\nR/J %lu/%lu\n"
+    "RMSSD %u\nPPI %u ms\n"
+    "ev H%lu V%lu HR%u",
     s_sampling ? "ON" : "OFF",
-    (unsigned long)(dur / 60),
-    s_last_ppi, s_min_ppi, s_max_ppi, (unsigned long)s_hrv_events,
-    s_last_hr, (unsigned long)s_hr_events);
+    (unsigned long)(dur / 60), (unsigned long)(dur % 60),
+    s_beats, (unsigned long)s_rej,
+    (unsigned long)s_rej_range, (unsigned long)s_rej_jump,
+    prv_rmssd(), s_last_ppi,
+    (unsigned long)s_hr_events, (unsigned long)s_hrv_events, s_last_hr);
   text_layer_set_text(s_text, s_buf);
 }
 
@@ -63,6 +119,7 @@ static void prv_select_long(ClickRecognizerRef ref, void *ctx) {
     s_hr_events = 0;
     s_min_ppi = 0;
     s_max_ppi = 0;
+    prv_gate_reset();
     prv_set_sampling(true);
   }
 }
