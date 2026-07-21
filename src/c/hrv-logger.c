@@ -98,7 +98,15 @@ static void prv_health_handler(HealthEventType event, void *context) {
 static void prv_set_sampling(bool on) {
   if (on == s_sampling) return;
   s_sampling = on;
-  health_service_set_hrv_sample_period(on ? 1 : 0);
+  if (on) {
+    // HRV first (creates the subscription), then SpO2 (ORs its feature bit in).
+    health_service_set_hrv_sample_period(1);
+    health_service_set_spo2_sample_period(1);
+  } else {
+    // SpO2 off first: hrv off fully unsubscribes and would drop SpO2 with it.
+    health_service_set_spo2_sample_period(0);
+    health_service_set_hrv_sample_period(0);
+  }
 }
 
 static void prv_tick(struct tm *tick_time, TimeUnits units) {
