@@ -102,25 +102,11 @@ The on-screen numbers after step 3 are the transport evidence; no
 `time_t` and collide with the build's `-Dtime_t=long`, failing the
 build. Keep those lines.
 
-## Overnight HRV validation (July 2026)
+## Role in HRV validation
 
-Firmware: PebbleOS `hrv-gh3x2x` (PR #1670), Pebble Time 2 (obelix@pvt), reference device Garmin Instinct Crossover Solar on the other wrist.
-
-**Problem:** overnight HRV delivery was ~2 intervals/min with a ~99% jump-rejection rate — too sparse for meaningful RMSSD. The root cause was isolated using hrv-logger's live gated stats readout, which made per-minute delivery and rejection rates visible in short daytime tests.
-
-**Two firmware fixes:**
-
-1. **Staleness guard** (`9627bca`): reset the jump gate after a 10 s gap (`HRV_STALE_SEC 10`) so the first interval after a dropout isn't compared against a stale predecessor. Result: acceptance ratio 37%→50%, jump rejections 1.69→1.01/min. Helped, but delivery stayed sparse.
-2. **Sampling-rate fix** (`7eb5f49c`): the Goodix HRV algorithm's vendor config declares `fs = 100`, but the driver registered the HRV function at 25 Hz — the algo ran at a quarter of its design rate. New `GH3X2X_HRV_SAMPLING_RATE 100` for HRV registration (HR stays at 25 Hz).
-
-**Results (fw `7eb5f49c`):**
-
-| Metric | Before (25 Hz) | After (100 Hz) |
-|---|---|---|
-| Awake delivery (5 min sitting) | — | ~92 intervals/min |
-| Overnight delivery | ~2/min | 64/min (38,244 beats / 9h57m) |
-| Overnight rejection ratio | ~50% | 1.3% |
-| Overnight RMSSD vs reference | — | 63 ms vs Instinct 44 ms (peak 5-min 65 ms) |
-| Overnight battery (static screen, release) | 0.4–0.8 %/hr | ~0.9 %/hr (9% / 9h57m) |
-
-100 Hz costs roughly 4–5% extra battery per night; kept as the default.
+hrv-logger's live gated stats readout (per-minute delivery, rejection
+rate, R/J split, RMSSD) is the diagnostic tool used to isolate HRV
+delivery and rejection problems in short daytime tests, without the
+30-minute save minimum of overnight recordings. The overnight
+validation writeup and the resulting firmware fixes (staleness guard,
+100 Hz sampling-rate fix) are documented in the hrv-monitor README.
