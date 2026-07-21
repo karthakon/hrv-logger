@@ -22,6 +22,18 @@ carrying PPI values in milliseconds. The screen shows:
 Long-press SELECT toggles sampling ON/OFF. Toggling OFF confirms the
 sensor returns to HR-only when no app requests HRV.
 
+## Branches
+
+- **`main`** — builds against the PR #1670 firmware/SDK
+  (https://github.com/karthakon/PebbleOS, branch `hrv-gh3x2x`). Use this
+  branch for testing PR #1670.
+- **`unified-fw`** — testing branch for the experimental unified
+  HRV + SpO2 firmware
+  (https://github.com/karthakon/PebbleOS/tree/hrv-spo2-unified). Adds an
+  SpO2 readout and calls SDK symbols that only exist in that firmware; it
+  will crash on stock or #1670 firmware. Firmware, SDK, and app must all
+  come from the same tree.
+
 ## Requires custom firmware
 
 This app calls `health_service_set_hrv_sample_period()` and reads
