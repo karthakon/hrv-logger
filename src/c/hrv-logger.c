@@ -7,7 +7,7 @@
 
 static Window *s_window;
 static TextLayer *s_text;
-static char s_buf[200];
+static char s_buf[240];
 
 static bool s_sampling = false;
 static uint16_t s_last_ppi = 0;
@@ -16,6 +16,9 @@ static uint16_t s_max_ppi = 0;
 static uint16_t s_last_hr = 0;
 static uint32_t s_hrv_events = 0;
 static uint32_t s_hr_events = 0;
+static uint32_t s_spo2_events = 0;
+static uint8_t s_last_spo2 = 0;
+static uint8_t s_last_spo2_q = 0;
 static time_t s_start = 0;
 
 // Mirror of hrv-monitor's gate (hrv_math.c) for comparable live stats.
@@ -85,6 +88,10 @@ static void prv_health_handler(HealthEventType event, void *context) {
       APP_LOG(APP_LOG_LEVEL_INFO, "HRV %lu ppi=%u ms",
               (unsigned long)s_hrv_events, ppi);
     }
+  } else if ((int)event == 6) {  // HealthEventSpO2Update
+    s_spo2_events++;
+    s_last_spo2 = health_service_peek_spo2_percent();
+    s_last_spo2_q = health_service_peek_spo2_quality();
   }
 }
 
@@ -100,12 +107,14 @@ static void prv_tick(struct tm *tick_time, TimeUnits units) {
     "HRV LOGGER %s\nDur %lu:%02lu\n"
     "Beats %u  Rej %lu\nR/J %lu/%lu\n"
     "RMSSD %u\nPPI %u ms\n"
+    "SpO2 %u%% q%u e%lu\n"
     "ev H%lu V%lu HR%u",
     s_sampling ? "ON" : "OFF",
     (unsigned long)(dur / 60), (unsigned long)(dur % 60),
     s_beats, (unsigned long)s_rej,
     (unsigned long)s_rej_range, (unsigned long)s_rej_jump,
     prv_rmssd(), s_last_ppi,
+    s_last_spo2, s_last_spo2_q, (unsigned long)s_spo2_events,
     (unsigned long)s_hr_events, (unsigned long)s_hrv_events, s_last_hr);
   text_layer_set_text(s_text, s_buf);
 }
